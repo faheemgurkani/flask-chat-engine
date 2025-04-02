@@ -1,0 +1,9 @@
+numpy
+pandas
+nltk
+flask
+sqlite3
+requests
+beautifulsoup4
+selenium
+webdriver-manager
