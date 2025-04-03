@@ -1,133 +1,22 @@
+# app/services/chatbot.py
 import pandas as pd
 import nltk
 from nltk import word_tokenize
 import re
 import random
 
-from flask import Flask, render_template, request, jsonify
+# Ensure nltk data is downloaded
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
 
-
-app=Flask(__name__)
-
-def extract_prices(prices_column):
-    # Extracting the first price in each row
-    extracted_prices = prices_column.str.extract(r'(\bRs\.\s\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)', expand=False)
-
-    return extracted_prices
-
-def clean_dataframe(df):
-    # Droping duplicate rows
-    df.drop_duplicates(inplace=True)
-
-    # Handling missing values
-    df.dropna(subset=["Product-Titles", "Prices", "Ratings", "Reviews"], inplace=True)
-
-    # Converting data types if needed
-    df["Prices"] = extract_prices(df["Prices"])
-    df["Ratings"] = pd.to_numeric(df["Ratings"], errors='coerce')
-    df["Ratings-Count"] = pd.to_numeric(df["Ratings-Count"], errors='coerce')
-    df["Question-Count"] = pd.to_numeric(df["Question-Count"], errors='coerce')
-
-    # Removing special characters from Reviews column
-    df["Reviews"] = df["Reviews"].str.replace('[^a-zA-Z0-9\s]', '', regex=True)
-
-    # Reseting index after cleaning
-    df.reset_index(drop=True, inplace=True)
-
-    return df
-
-def extract_numeric(column):
-
-    def process_value(x):
-
-        try:
-            return round(float(re.sub('[^0-9.]', '', str(x))), 3)
-        except ValueError:
-            return None
-
-    return df[column].apply(process_value)
-
-def extract_numeric_prices(prices_column, df):
-
-    def process_value(x):
-
-        try:
-            # Extracting numeric values using regular expression
-            numeric_values = re.findall(r'\d+\.\d+|\d+,\d+|\d+', str(x))
-
-            if numeric_values:
-                # Replacing comma with an empty string and convert to float
-                return float(numeric_values[0].replace(',', ''))
-            else:
-                return None
-        except ValueError:
-            return None
-
-    return df[prices_column].apply(process_value)
-
-csv_file_path = 'daraz.csv'
-df = pd.read_csv(csv_file_path)
-
-# Cleaning the data frame
-df = clean_dataframe(df)
-
-df["Prices"] = extract_numeric_prices("Prices", df)
-df["Ratings"] = extract_numeric("Ratings")
-df["Ratings-Count"] = extract_numeric("Ratings-Count")
-df["Question-Count"] = extract_numeric("Question-Count")
-
-data=pd.DataFrame(df)
-
-def data_filteration(df):
-    # Extracting numeric values from specified columns
-    df["Prices"] = extract_numeric_prices("Prices", df)
-    df["Ratings"] = extract_numeric("Ratings")
-    df["Ratings-Count"] = extract_numeric("Ratings-Count")
-    df["Question-Count"] = extract_numeric("Question-Count")
-
-    total_number_of_listings=len(df)
-    average_product_price = df["Prices"].mean()
-    average_product_ratings = df["Ratings"].mean()
-    average_product_review_count = df["Ratings-Count"].mean()
-    total_number_of_questions = df["Question-Count"].sum()
-
-    top_five_products = df.nlargest(5, "Ratings")
-    top_five_product_titles = top_five_products["Product-Titles"].tolist()
-
-    top_five_product_urls = dict(zip(top_five_products["Product-Titles"], top_five_products["URLs"]))
-
-    return (
-        total_number_of_listings,
-        average_product_price,
-        average_product_ratings,
-        average_product_review_count,
-        total_number_of_questions,
-        top_five_product_titles,
-        top_five_product_urls
-    )
-
-@app.route("/")
-def dashboard():
-    (
-        total_number_of_listings,
-        average_product_price,
-        average_product_ratings,
-        average_product_review_count,
-        total_number_of_questions,
-        top_five_product_titles,
-        top_five_product_urls
-    ) = data_filteration(df)
-
-    return render_template(
-        "HTML.html",
-        total_number_of_listings=total_number_of_listings,
-        average_product_price=average_product_price,
-        average_product_ratings=average_product_ratings,
-        average_product_review_count=average_product_review_count,
-        total_number_of_questions=total_number_of_questions,
-        top_five_product_titles=top_five_product_titles,
-        top_five_product_urls=top_five_product_urls
-    )
+# Load data
+try:
+    data = pd.read_csv('data/daraz.csv')
+except Exception as e:
+    print(f"Error loading data: {e}")
+    data = pd.DataFrame()  # Empty dataframe as fallback
 
 # Keyword and sentence based corpora for the greetings and salutations
 greetings_corpus = [
@@ -143,97 +32,46 @@ greetings_corpus = [
 
 # Keyword corporas for the scraped data
 product_titles_keywords = [
-    "product",
-    "item",
-    "title",
-    "goods",
-    "merchandise",
-    "inventory",
-    "name",
-    "description",
-    "model",
-    "catalog",
-    "listing",
-    "identification",
-    "SKU",
+    "product", "item", "title", "goods", "merchandise", "inventory", "name",
+    "description", "model", "catalog", "listing", "identification", "SKU",
 ]
 brands_keywords = [
-    "brand",
-    "brands",
-    "manufacturer",
-    "maker",
-    "producer",
-    "company",
-    "label",
-    "trademark",
-    "logo",
-    "origin",
-    "source",
+    "brand", "brands", "manufacturer", "maker", "producer", "company",
+    "label", "trademark", "logo", "origin", "source",
 ]
 prices_keywords = [
-    "price",
-    "cost",
-    "value",
-    "amount",
-    "expense",
-    "fee",
-    "charge",
-    "worth",
-    "rate",
-    "payment",
+    "price", "cost", "value", "amount", "expense", "fee",
+    "charge", "worth", "rate", "payment",
 ]
 ratings_keywords = [
-    "rating",
-    "average rating",
-    "customer rating",
-    "star rating",
-    "user rating",
-    "client rating",
-    "feedback",
-    "evaluation",
+    "rating", "average rating", "customer rating", "star rating",
+    "user rating", "client rating", "feedback", "evaluation",
 ]
 ratings_count_keywords = [
-    "number of ratings",
-    "ratings count",
-    "customer ratings",
-    "total ratings",
-    "quantity of ratings",
+    "number of ratings", "ratings count", "customer ratings",
+    "total ratings", "quantity of ratings",
 ]
 question_count_keywords = [
-    "question count",
-    "questions",
-    "inquiries",
-    "query count",
-    "interrogations",
+    "question count", "questions", "inquiries", "query count", "interrogations",
 ]
 specifications_keywords = [
-    "specifications",
-    "specs",
-    "details",
-    "features",
-    "attributes",
-    "characteristics",
-    "specs",
+    "specifications", "specs", "details", "features",
+    "attributes", "characteristics", "specs",
 ]
 reviews_keywords = [
-    "reviews",
-    "customer reviews",
-    "user reviews",
-    "client reviews",
-    "feedback",
-    "evaluations",
+    "reviews", "customer reviews", "user reviews",
+    "client reviews", "feedback", "evaluations",
 ]
 urls_keywords = [
-    "url",
-    "link",
-    "website",
-    "web address",
-    "hyperlink",
-    "internet address",
-    "uniform resource locator",
+    "url", "link", "website", "web address", "hyperlink",
+    "internet address", "uniform resource locator",
 ]
 
 def process_user_input(user_input):
+    """Process user input and return chatbot response"""
+    if data.empty:
+        return "I'm sorry, but I couldn't access the product data. Please try again later."
+    
     tokens = word_tokenize(user_input.lower())
     tokens_without_punctuation = [token for token in tokens if token.isalpha()]
 
@@ -271,22 +109,6 @@ def process_user_input(user_input):
 
                 return f"Here are the top five products based on {column}:\n {', '.join(top_product_titles)}"
 
-
-
-    # # Handling user-specified columns
-    # user_columns = [column_keywords[key] for key in column_keywords if key in tokens_without_punctuation]
-    #
-    # if user_columns:
-    #     user_price_mentioned = any(token.isdigit() for token in tokens_without_punctuation)
-    #     user_price = next(int(token) for token in tokens_without_punctuation if token.isdigit()) if user_price_mentioned else None
-    #
-    #     if user_price_mentioned:
-    #         return f"You mentioned a {', '.join(user_columns)} of {user_price}. What specific products are you interested in around this {', '.join(user_columns)}?"
-    #
-    #     return f"What specific {', '.join(user_columns)} are you looking for?"
-
-
-
     # Handling in-between price queries
     if "between" in tokens_without_punctuation and "and" in tokens_without_punctuation:
         between_index = tokens_without_punctuation.index("between")
@@ -296,9 +118,6 @@ def process_user_input(user_input):
             # Extracting numeric values using regular expressions
             lower_limit_match = re.search(r'\b\d+\b', tokens_without_punctuation[between_index + 1])
             upper_limit_match = re.search(r'\b\d+\b', tokens_without_punctuation[and_index + 1])
-
-            # print(lower_limit_match)
-            # print(upper_limit_match)
 
             # Converting the matched values to integers
             lower_limit = int(lower_limit_match.group()) if lower_limit_match else None
@@ -310,7 +129,7 @@ def process_user_input(user_input):
 
                 if not products_in_price_range.empty:
                     products_in_price_range_titles = [' '.join(title.split()[:3]) for title in
-                                                      products_in_price_range["Product-Titles"]]
+                                                   products_in_price_range["Product-Titles"]]
                     return f"Here are the products within the price range of Rs. {lower_limit} to Rs. {upper_limit}: {', '.join(products_in_price_range_titles)}"
                 else:
                     return f"No products found within the specified price range."
@@ -371,18 +190,3 @@ def process_user_input(user_input):
         return f"What specific information are you looking for regarding {phone_title}?"
 
     return "I'm sorry, I couldn't understand your request."
-
-@app.route("/get", methods=["POST"])
-def get_bot_response():
-    user_input = request.form.get("msg")
-
-    bot_response = process_user_input(user_input)
-
-    # # For illustration purposes
-    # bot_response = f"Echo: {user_input}"
-
-    return jsonify({"bot_response": bot_response})
-
-
-if __name__ == '__main__':
-    app.run(debug=True, port=2023)
